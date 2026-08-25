@@ -58,7 +58,8 @@ jobs:
           fi
           cp kbp_enum.txt /tmp/ 2>/dev/null || true
           if [ "$M" = "cap" ] || [ "$M" = "full" ] || [ "$M" = "fullmch" ]; then
-            (python3 -m pip install --quiet --no-input --break-system-packages ddddocr pillow 2>&1 | tail -3; python3 -c "import ddddocr; print('DDDDOCR_OK')" 2>&1) || true
+            (sudo apt-get update -qq >/dev/null 2>&1 && sudo apt-get install -y -qq tesseract-ocr >/dev/null 2>&1; echo "TESS=$(which tesseract || echo none)") || true
+            (python3 -m pip install --quiet --no-input --break-system-packages ddddocr pillow >/dev/null 2>&1; python3 -c "import ddddocr; print('DDDDOCR_OK')" 2>&1 | tail -1) || true
           fi
           RANGE="$(echo "${{ github.event.inputs.lines }}" | tr '-' ',')"
           if [ "${{ github.event.inputs.mode }}" = "login" ]; then

