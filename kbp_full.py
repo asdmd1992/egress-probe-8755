@@ -22,6 +22,11 @@ email code, which is the point of this chain).
 """
 import base64, http.cookiejar, json, os, random, sys, time, urllib.request, urllib.error
 
+try:
+    from PIL import Image, ImageOps  # noqa: E402 (runner installs via apt/pip)
+except Exception:
+    Image = ImageOps = None
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kbp_admin_login import rsa_encrypt, aes_enc, aes_dec  # openssl crypto helpers
 
@@ -153,15 +158,21 @@ def ocr_answers(img_bytes):
     # --- ddddocr ---
     try:
         import ddddocr
-        from PIL import Image, ImageOps
-        have_pil = True
+        have_pil = Image is not None
         ocr = ddddocr.DdddOcr(show_ad=False)
         try:
             answers.append(("dd_raw", ocr.classification(img_bytes)))
         except Exception as e:
             print("[!] ocr raw err %s" % e, flush=True)
         try:
-            img = Image.open(io_bytes(img_bytes)).convert("L")
+            img0 = Image.open(io_bytes(img_bytes))
+            # foreground mask (best: both samples unanimous)
+            fm = fg_mask(img0)
+            fm_b = io_bytes2(fm)
+            answers.append(("dd_fg", ocr.classification(fm_b)))
+            fm4 = fm.resize((fm.width * 4, fm.height * 4), Image.LANCZOS)
+            answers.append(("dd_fg4x", ocr.classification(io_bytes2(fm4))))
+            img = img0.convert("L")
             img = img.resize((img.width * 3, img.height * 3), Image.LANCZOS)
             img = ImageOps.autocontrast(img)
             answers.append(("dd_gray3x", ocr.classification(io_bytes2(img))))
@@ -173,8 +184,12 @@ def ocr_answers(img_bytes):
     try:
         import subprocess
         if have_pil:
-            from PIL import Image, ImageOps
-            img = Image.open(io_bytes(img_bytes)).convert("L")
+            img0 = Image.open(io_bytes(img_bytes))
+            fm = fg_mask(img0)
+            _tess_on_image("tess_fg", fm, answers)
+            fm4 = fm.resize((fm.width * 4, fm.height * 4), Image.LANCZOS)
+            _tess_on_image("tess_fg4x", fm4, answers)
+            img = img0.convert("L")
             _tess_on_image("tess_raw", img, answers)
             up = img.resize((img.width * 4, img.height * 4), Image.LANCZOS)
             up = ImageOps.autocontrast(up)
@@ -223,6 +238,22 @@ def io_bytes2(img):
     b = io.BytesIO()
     img.save(b, format="PNG")
     return b.getvalue()
+
+
+def fg_mask(img):
+    """Foreground mask: any saturated non-transparent pixel -> black-on-white L.
+    KBitPay captcha draws 4 chars in 2 interleaved colors (red+green); merging
+    foreground pixels removes the color-split that confuses OCR."""
+    im = img.convert("RGBA")
+    px = im.load()
+    W, H = im.size
+    out = Image.new("L", (W, H), 255)
+    for y in range(H):
+        for x in range(W):
+            r, g, b, a = px[x, y]
+            if a > 30 and (max(r, g, b) - min(r, g, b) > 30 or max(r, g, b) > 100):
+                out.putpixel((x, y), 0)
+    return out
 
 
 def fetch_captcha(c):
