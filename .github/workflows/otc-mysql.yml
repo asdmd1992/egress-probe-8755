@@ -1,0 +1,36 @@
+name: otc-mysql
+on:
+  workflow_dispatch:
+    inputs:
+      ip:
+        description: 'mysql ip'
+        required: false
+        default: '124.243.183.235'
+      port:
+        description: 'mysql port'
+        required: false
+        default: '9527'
+      creds:
+        description: 'user:pass pairs comma-separated'
+        required: false
+        default: 'otcAdmin:k1U$DTTbVWj'
+      hosts:
+        description: 'vhosts to fingerprint on 443'
+        required: false
+        default: 'keepbit.xyz,testspeech.keepbit.xyz,testalk.keepbit.xyz,grafana.keepbit.xyz'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: probe otc mysql
+        env:
+          OTC_IP: ${{ github.event.inputs.ip }}
+          OTC_PORT: ${{ github.event.inputs.port }}
+          OTC_CREDS: ${{ github.event.inputs.creds }}
+          OTC_HOSTS: ${{ github.event.inputs.hosts }}
+        run: |
+          python3 -m pip install -q --break-system-packages PyMySQL 2>/dev/null || python3 -m pip install -q PyMySQL
+          python3 -c "import pymysql; print('PYMYSQL_OK')"
+          python3 otc_mysql_probe.py --ip "$OTC_IP" --port "$OTC_PORT" --creds "$OTC_CREDS" --hosts "$OTC_HOSTS"
