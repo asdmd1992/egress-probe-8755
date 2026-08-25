@@ -180,7 +180,7 @@ def main():
         if img_b64:
             raw = base64.b64decode(img_b64)
             open("/tmp/cap.png", "wb").write(raw)
-            print("CAP img_b64_begin=%s" % img_b64[:120], flush=True)
+            print("CAP img_b64_full=%s" % img_b64, flush=True)
             for name, ans in ocr_answers(raw):
                 print("CAP OCR %s -> %r" % (name, ans), flush=True)
         else:

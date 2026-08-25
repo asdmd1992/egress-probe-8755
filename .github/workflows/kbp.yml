@@ -58,7 +58,7 @@ jobs:
           fi
           cp kbp_enum.txt /tmp/ 2>/dev/null || true
           if [ "$M" = "cap" ] || [ "$M" = "full" ] || [ "$M" = "fullmch" ]; then
-            pip install -q --no-input ddddocr pillow 2>&1 | tail -1 || true
+            pip install -q --no-input --break-system-packages ddddocr pillow 2>&1 | tail -1 || true
           fi
           RANGE="$(echo "${{ github.event.inputs.lines }}" | tr '-' ',')"
           if [ "${{ github.event.inputs.mode }}" = "login" ]; then
