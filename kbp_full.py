@@ -389,7 +389,9 @@ def main():
         r2 = c.post_enc("/api/Register/CheckCaptchaCode", {"email": em, "code": code, "type": "2"})
         print("MCH CheckCaptchaCode -> %s" % json.dumps(r2, ensure_ascii=False)[:200], flush=True)
         pause()
-        for label, pwd in (("Aa123456.", "Aa123456."), ("666666", "666666")):
+        _envpwd = os.environ.get("KBP_PWD", "").strip()
+        _pwds = [(_envpwd, _envpwd)] if _envpwd else [("Aa123456.", "Aa123456."), ("666666", "666666")]
+        for label, pwd in _pwds:
             r3 = c.post_enc("/api/Login/Login", {
                 "appID": APPID, "pwd": base64.b64encode(pwd.encode()).decode(),
                 "email": em, "isAdmin": False, "language": "en"})

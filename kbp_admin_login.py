@@ -187,16 +187,20 @@ def main():
             sys.exit(1)
         hdr = {"Authorization": "Bearer " + token}
         for line in read_lines("/tmp/kbp_enum.txt"):
-            parts = line.split("|", 2)
+            parts = line.split("|", 3)
             m, path = parts[0], parts[1]
             body = parts[2] if len(parts) > 2 else ""
+            xff = parts[3].strip() if len(parts) > 3 else ""
+            h = dict(hdr)
+            if xff:
+                h["X-Forwarded-For"] = xff
             try:
                 if m == "GET":
-                    r = c.get(path, headers=hdr)
+                    r = c.get(path, headers=h)
                 else:
-                    r = c.post_enc(path, json.loads(body) if body else {}, headers=hdr)
+                    r = c.post_enc(path, json.loads(body) if body else {}, headers=h)
                 s = json.dumps(r, ensure_ascii=False)
-                print("ENUM %s %s -> %s" % (m, path, s[:600]), flush=True)
+                print("ENUM %s %s XFF=%s -> %s" % (m, path, xff or "-", s[:4000]), flush=True)
             except Exception as e:
                 print("ENUM %s %s -> ERR %s" % (m, path, e), flush=True)
             if isinstance(r, dict) and "4047" in str(r.get("ErrCode")):
