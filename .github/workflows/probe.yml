@@ -1,0 +1,23 @@
+name: url-check
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'URLs to check, one per line'
+        required: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: run checks
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
+          echo "runner_ip: $(curl -sk --max-time 15 https://api.ipify.org || echo unknown)"
+          echo "${{ github.event.inputs.urls }}" | while IFS= read -r u; do
+            [ -z "$u" ] && continue
+            echo "=== $u ==="
+            curl -sk --max-time 25 -A "$UA" -w '\n[HTTP:%{http_code} len:%{size_download}]\n' "$u" | head -c 1500
+            echo
+            sleep $((RANDOM % 8 + 8))
+          done
