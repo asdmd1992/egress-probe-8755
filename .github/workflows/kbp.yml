@@ -101,6 +101,8 @@ jobs:
             python3 kbp_full.py cap
           elif [ "$M" = "full" ] || [ "$M" = "fullmch" ]; then
             python3 kbp_full.py "$M" "${{ github.event.inputs.target }}" "${{ github.event.inputs.code }}"
+          elif [ "$M" = "register" ]; then
+            python3 kbp_register.py "${{ github.event.inputs.target }}" "${{ github.event.inputs.pwd }}" "${{ github.event.inputs.code }}"
           elif [ "$M" = "pwds" ]; then
             python3 kbp_pwds.py "${{ github.event.inputs.target }}" '${{ github.event.inputs.pwds }}'
           else
