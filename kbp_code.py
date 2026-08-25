@@ -93,9 +93,18 @@ def main():
 
     elif mode == "reset":
         em = sys.argv[2]; code = sys.argv[3]; newpwd = sys.argv[4]
-        r = c.post_enc("/api/User/ResetPassword", {"email": em, "verificationCode": code,
+        r = c.post_enc("/api/User/ResetPassword", {"email": em, "code": code,
                        "pwd": base64.b64encode(newpwd.encode()).decode(), "type": "3"})
         print("RESET %s -> %s" % (em, json.dumps(r, ensure_ascii=False)[:300]), flush=True)
+
+    elif mode == "reset2":
+        em = sys.argv[2]; code = sys.argv[3]; newpwd = sys.argv[4]
+        r = c.post_enc("/api/Register/CheckCaptchaCode", {"email": em, "code": code, "type": "3"})
+        print("RESET2 CheckCaptchaCode(type3) -> %s" % (json.dumps(r, ensure_ascii=False)[:300]), flush=True)
+        pause()
+        r = c.post_enc("/api/User/ResetPassword", {"email": em, "code": code,
+                       "pwd": base64.b64encode(newpwd.encode()).decode(), "type": "3"})
+        print("RESET2 ResetPassword -> %s" % (json.dumps(r, ensure_ascii=False)[:300]), flush=True)
 
     print("[*] done", flush=True)
 
