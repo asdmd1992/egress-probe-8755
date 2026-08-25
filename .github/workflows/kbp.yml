@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'oracle|login|enum|chk|code|verify|reset'
+        description: 'oracle|login|enum|chk|code|verify|reset|pwds'
         required: true
         default: 'login'
       lines:
@@ -40,6 +40,10 @@ on:
         default: ''
       pwd:
         description: 'password override (full mode)'
+        required: false
+        default: ''
+      pwds:
+        description: 'comma-separated pwd candidates (pwds mode)'
         required: false
         default: ''
 
@@ -97,6 +101,8 @@ jobs:
             python3 kbp_full.py cap
           elif [ "$M" = "full" ] || [ "$M" = "fullmch" ]; then
             python3 kbp_full.py "$M" "${{ github.event.inputs.target }}" "${{ github.event.inputs.code }}"
+          elif [ "$M" = "pwds" ]; then
+            python3 kbp_pwds.py "${{ github.event.inputs.target }}" "${{ github.event.inputs.pwds }}"
           else
             python3 kbp_admin_login.py "$M" "${{ github.event.inputs.target }}"
           fi
