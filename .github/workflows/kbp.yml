@@ -57,21 +57,24 @@ jobs:
             printf '%s' "$KBP_CREDS" > /tmp/kbp_creds.txt
           fi
           cp kbp_enum.txt /tmp/ 2>/dev/null || true
+          M="${{ github.event.inputs.mode }}"
           if [ "$M" = "cap" ] || [ "$M" = "full" ] || [ "$M" = "fullmch" ]; then
-            (sudo apt-get update -qq >/dev/null 2>&1 && sudo apt-get install -y -qq tesseract-ocr >/dev/null 2>&1; echo "TESS=$(which tesseract || echo none)") || true
-            (python3 -m pip install --quiet --no-input --break-system-packages ddddocr pillow >/dev/null 2>&1; python3 -c "import ddddocr; print('DDDDOCR_OK')" 2>&1 | tail -1) || true
+            sudo apt-get update -qq >/dev/null 2>&1 || true
+            sudo apt-get install -y -qq tesseract-ocr >/dev/null 2>&1 || true
+            echo "TESS=$(which tesseract || echo none)"
+            python3 -m pip install --no-input --break-system-packages --quiet ddddocr pillow onnxruntime opencv-python-headless 2>&1 | tail -3 || true
+            python3 -c "import ddddocr, PIL; print('OCR_DEPS_OK')" 2>&1 | tail -1
           fi
           RANGE="$(echo "${{ github.event.inputs.lines }}" | tr '-' ',')"
-          if [ "${{ github.event.inputs.mode }}" = "login" ]; then
+          if [ "$M" = "login" ]; then
             sed -n "${RANGE}p" /tmp/kbp_creds.txt > /tmp/kbp_sel.txt && mv /tmp/kbp_sel.txt /tmp/kbp_creds.txt
           fi
-          if [ "${{ github.event.inputs.mode }}" = "oracle" ]; then
+          if [ "$M" = "oracle" ]; then
             sed -n "${RANGE}p" /tmp/kbp_emails.txt > /tmp/kbp_sel.txt && mv /tmp/kbp_sel.txt /tmp/kbp_emails.txt
           fi
           export KBP_BASE="${{ github.event.inputs.base }}"
           export KBP_APPID="${{ github.event.inputs.appid }}"
           export KBP_ISADMIN="${{ github.event.inputs.isadmin }}"
-          M="${{ github.event.inputs.mode }}"
           if [ "$M" = "code" ]; then
             python3 kbp_code.py code "${{ github.event.inputs.target }}" "${{ github.event.inputs.lines }}"
           elif [ "$M" = "verify" ]; then

