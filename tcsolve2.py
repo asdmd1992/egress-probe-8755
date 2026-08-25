@@ -92,7 +92,7 @@ def make_ctx(pw):
 def find_captcha_frame(page):
     for f in page.frames:
         u = f.url
-        if "captcha.qq.com" in u or "tcaptcha" in u or "cap_union" in u:
+        if "captcha" in u or "tcaptcha" in u or "cap_union" in u or "gtimg" in u:
             return f
     return None
 
@@ -1039,9 +1039,13 @@ def do_solve(page):
     page.click('button[type="submit"]')
     log("email submitted")
 
-    frame = wait_captcha_frame(page, 30)
+    frame = wait_captcha_frame(page, 45)
     if not frame:
         log("FAIL: no captcha frame appeared")
+        try:
+            log("frames: ", [(f.url[:120]) for f in page.frames])
+        except Exception:
+            pass
         shot(page, "no_captcha.png")
         return
 
