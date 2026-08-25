@@ -1,0 +1,36 @@
+name: tcprobe3
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: 'target email'
+        required: false
+        default: 'admin@qqlink.com'
+
+jobs:
+  tc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: deps
+        run: |
+          pip install -q playwright
+          python -m playwright install --with-deps chromium
+      - name: run
+        env:
+          TC_EMAIL: ${{ github.event.inputs.email }}
+        run: |
+          mkdir -p evidence
+          echo "runner_ip: $(curl -sk --max-time 15 https://api.ipify.org || echo unknown)"
+          cd "$GITHUB_WORKSPACE"
+          python3 tcprobe3.py
+          echo "=== evidence files ==="
+          ls -la evidence/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tc3-evidence
+          path: evidence/
+          if-no-files-found: ignore
