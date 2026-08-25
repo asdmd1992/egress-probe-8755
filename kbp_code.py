@@ -93,7 +93,7 @@ def main():
 
     elif mode == "reset":
         em = sys.argv[2]; code = sys.argv[3]; newpwd = sys.argv[4]
-        r = c.post_enc("/api/User/ResetPassword", {"email": em, "code": code,
+        r = c.post_enc("/api/User/ResetPassword", {"email": em, "verificationCode": code,
                        "pwd": base64.b64encode(newpwd.encode()).decode(), "type": "3"})
         print("RESET %s -> %s" % (em, json.dumps(r, ensure_ascii=False)[:300]), flush=True)
 

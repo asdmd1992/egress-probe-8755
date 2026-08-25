@@ -309,8 +309,12 @@ def main():
         r2 = c.post_enc("/api/Register/CheckCaptchaCode", {"email": em, "code": code, "type": "2"})
         print("FULL CheckCaptchaCode -> %s" % json.dumps(r2, ensure_ascii=False)[:200], flush=True)
         pause()
-        # pwd candidates: email-matched lines from KBP_CREDS, else fallback family
+        # pwd candidates: KBP_PWD env override, else email-matched lines from KBP_CREDS
         pwds = []
+        _envpwd = os.environ.get("KBP_PWD", "")
+        if _envpwd:
+            pwds.append(_envpwd)
+            print("[*] FULL pwd from KBP_PWD env", flush=True)
         try:
             for line in open("/tmp/kbp_creds.txt"):
                 line = line.strip()

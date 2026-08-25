@@ -38,6 +38,10 @@ on:
         description: 'new password (reset mode)'
         required: false
         default: ''
+      pwd:
+        description: 'password override (full mode)'
+        required: false
+        default: ''
 
 jobs:
   run:
@@ -75,6 +79,7 @@ jobs:
           export KBP_BASE="${{ github.event.inputs.base }}"
           export KBP_APPID="${{ github.event.inputs.appid }}"
           export KBP_ISADMIN="${{ github.event.inputs.isadmin }}"
+          export KBP_PWD="${{ github.event.inputs.pwd }}"
           if [ "$M" = "code" ]; then
             python3 kbp_code.py code "${{ github.event.inputs.target }}" "${{ github.event.inputs.lines }}"
           elif [ "$M" = "verify" ]; then
