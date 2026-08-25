@@ -1,0 +1,64 @@
+name: tcsolve
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'solve|reset|login'
+        required: true
+        default: solve
+      email:
+        description: 'target email'
+        required: false
+        default: 'admin@qqlink.com'
+      max:
+        description: 'max challenge attempts'
+        required: false
+        default: '3'
+      newpass:
+        description: 'new password (8-20, letter+digit+special)'
+        required: false
+        default: ''
+      reseturl:
+        description: 'reset url (mode=reset)'
+        required: false
+        default: ''
+      imapwait:
+        description: 'max seconds to wait for email'
+        required: false
+        default: '240'
+
+jobs:
+  tc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: deps
+        run: |
+          pip install -q playwright opencv-python-headless numpy pillow onnxruntime
+          python -m playwright install --with-deps chromium
+          sudo apt-get install -y -q xvfb >/dev/null 2>&1 || true
+      - name: run
+        env:
+          TC_MODE: ${{ github.event.inputs.mode }}
+          TC_EMAIL: ${{ github.event.inputs.email }}
+          TC_MAX: ${{ github.event.inputs.max }}
+          TC_NEWPASS: ${{ github.event.inputs.newpass }}
+          TC_RESET_URL: ${{ github.event.inputs.reseturl }}
+          TC_IMAP_WAIT: ${{ github.event.inputs.imapwait }}
+          TC_IMAP_USER: ${{ secrets.TC_IMAP_USER }}
+          TC_IMAP_PW: ${{ secrets.TC_IMAP_PW }}
+        run: |
+          mkdir -p evidence
+          echo "runner_ip: $(curl -sk --max-time 15 https://api.ipify.org || echo unknown)"
+          cd "$GITHUB_WORKSPACE"
+          python3 tcsolve2.py "$TC_MODE"
+          echo "=== evidence files ==="
+          ls -la evidence/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tc2-evidence
+          path: evidence/
+          if-no-files-found: ignore
