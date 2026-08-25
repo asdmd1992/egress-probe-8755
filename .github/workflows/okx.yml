@@ -22,8 +22,9 @@ jobs:
           elif [ "${{ github.event.inputs.mode }}" = "probe" ]; then
             IFS='|' read -r K S P <<< "$OKX_CREDS"
             python3 probe_okx_v6.py "$K" "$S" "$P"
+          elif [ "${{ github.event.inputs.mode }}" = "ctl" ]; then
+            IFS='|' read -r K S P <<< "$OKX_CREDS"
+            python3 probe_okx_ctl.py "$K" "$S" "$P"
           else
-            printf '%s' "$COVALENT_KEYS" | while IFS= read -r ck; do
-              [ -n "$ck" ] && python3 verify_covalent.py "$ck"
-            done
+            python3 verify_covalent2.py
           fi
