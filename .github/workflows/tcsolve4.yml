@@ -1,0 +1,85 @@
+name: tcsolve4
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'solve|reset|login'
+        required: true
+        default: solve
+      email:
+        description: 'target email (fake zz-nosuch-* for dry run)'
+        required: false
+        default: 'admin@qqlink.com'
+      max:
+        description: 'max challenge attempts'
+        required: false
+        default: '4'
+      newpass:
+        description: 'new password (mode=reset)'
+        required: false
+        default: ''
+      reseturl:
+        description: 'reset url (mode=reset)'
+        required: false
+        default: ''
+      imapwait:
+        description: 'max seconds to wait for email'
+        required: false
+        default: '240'
+      force:
+        description: 'TC_FORCE=1 pick random tile when classifier empty (interaction dry-run)'
+        required: false
+        default: '0'
+      dryrun:
+        description: 'TC_DRYRUN=1 stop after captcha verify outcome (no IMAP/reset)'
+        required: false
+        default: '1'
+
+jobs:
+  tc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q tesseract-ocr tesseract-ocr-chi-sim xvfb
+          pip install -q playwright opencv-python-headless numpy pillow onnxruntime
+          python -m playwright install --with-deps chromium
+      - name: clip-models
+        run: |
+          mkdir -p clip
+          curl -sL --retry 3 -o clip/vision_model.onnx "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/vision_model.onnx"
+          curl -sL --retry 3 -o clip/text_model.onnx "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/text_model.onnx"
+          for f in vocab.json merges.txt config.json tokenizer_config.json special_tokens_map.json; do
+            curl -sL --retry 3 -o clip/$f "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/$f"
+          done
+          ls -la clip/
+      - name: run
+        env:
+          TC_MODE: ${{ github.event.inputs.mode }}
+          TC_EMAIL: ${{ github.event.inputs.email }}
+          TC_MAX: ${{ github.event.inputs.max }}
+          TC_NEWPASS: ${{ github.event.inputs.newpass }}
+          TC_RESET_URL: ${{ github.event.inputs.reseturl }}
+          TC_IMAP_WAIT: ${{ github.event.inputs.imapwait }}
+          TC_FORCE: ${{ github.event.inputs.force }}
+          TC_DRYRUN: ${{ github.event.inputs.dryrun }}
+          TC_CLIP_DIR: clip
+          TC_IMAP_USER: ${{ secrets.TC_IMAP_USER }}
+          TC_IMAP_PW: ${{ secrets.TC_IMAP_PW }}
+        run: |
+          mkdir -p evidence
+          echo "runner_ip: $(curl -sk --max-time 15 https://api.ipify.org || echo unknown)"
+          cd "$GITHUB_WORKSPACE"
+          python3 tcsolve4.py "$TC_MODE"
+          echo "=== evidence files ==="
+          ls -la evidence/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tc4-evidence
+          path: evidence/
+          if-no-files-found: ignore
