@@ -76,6 +76,9 @@ jobs:
           if [ "$M" = "oracle" ]; then
             sed -n "${RANGE}p" /tmp/kbp_emails.txt > /tmp/kbp_sel.txt && mv /tmp/kbp_sel.txt /tmp/kbp_emails.txt
           fi
+          if [ "$M" = "enum" ]; then
+            sed -n "${RANGE}p" /tmp/kbp_enum.txt > /tmp/kbp_sel.txt && mv /tmp/kbp_sel.txt /tmp/kbp_enum.txt
+          fi
           export KBP_BASE="${{ github.event.inputs.base }}"
           export KBP_APPID="${{ github.event.inputs.appid }}"
           export KBP_ISADMIN="${{ github.event.inputs.isadmin }}"
