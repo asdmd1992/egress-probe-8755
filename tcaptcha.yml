@@ -1,0 +1,60 @@
+name: tcaptcha
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'probe|solve|reset'
+        required: true
+        default: probe
+      email:
+        description: 'target email'
+        required: false
+        default: 'admin@qqlink.com'
+      max:
+        description: 'max challenge attempts'
+        required: false
+        default: '3'
+      resetlink:
+        description: 'reset link (mode=reset)'
+        required: false
+        default: ''
+      newpass:
+        description: 'new password (mode=reset)'
+        required: false
+        default: ''
+
+jobs:
+  tc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: deps
+        run: |
+          pip install -q playwright opencv-python-headless numpy pillow
+          python -m playwright install --with-deps chromium
+          sudo apt-get install -y -q xvfb >/dev/null 2>&1 || true
+      - name: run
+        env:
+          TC_MODE: ${{ github.event.inputs.mode }}
+          TC_EMAIL: ${{ github.event.inputs.email }}
+          TC_MAX: ${{ github.event.inputs.max }}
+          TC_NEWPASS: ${{ github.event.inputs.newpass }}
+        run: |
+          mkdir -p evidence
+          echo "runner_ip: $(curl -sk --max-time 15 https://api.ipify.org || echo unknown)"
+          cd "$GITHUB_WORKSPACE"
+          if [ "$TC_MODE" = "reset" ]; then
+            python3 tcaptcha_solve.py reset '${{ github.event.inputs.resetlink }}'
+          else
+            python3 tcaptcha_solve.py "$TC_MODE"
+          fi
+          echo "=== evidence files ==="
+          ls -la evidence/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tc-evidence
+          path: evidence/
+          if-no-files-found: ignore
