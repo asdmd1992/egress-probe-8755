@@ -775,12 +775,70 @@ def classify_tiles(sprite):
     return res
 
 
+def find_instruction(obj):
+    if isinstance(obj, dict):
+        for k in ("instruction", "Instruction", "text"):
+            if k in obj and isinstance(obj[k], str) and obj[k].strip():
+                return obj[k].strip()
+        for v in obj.values():
+            r = find_instruction(v)
+            if r:
+                return r
+    elif isinstance(obj, list):
+        for v in obj:
+            r = find_instruction(v)
+            if r:
+                return r
+    return ""
+
+
+def ocr_tile_img(tile_bgr):
+    import subprocess, tempfile
+    p = tempfile.mktemp(suffix=".png")
+    cv2.imwrite(p, tile_bgr)
+    try:
+        out = subprocess.run(["tesseract", p, "stdout", "-l", "chi_sim+eng", "--psm", "6"],
+                             capture_output=True, timeout=30)
+        txt = out.stdout.decode("utf-8", "ignore")
+    except Exception as e:
+        log("ocr fail:", e)
+        txt = ""
+    try:
+        os.remove(p)
+    except Exception:
+        pass
+    return re.sub(r"\s+", "", txt)
+
+
+def pick_tile_text(sprite, instruction):
+    """text challenge: 包含文字[:：]X -> find tile whose OCR text contains X"""
+    m = re.search(r'包含文字\s*[:：]?\s*[“"\'「]?([^”"\'」\s]+)[”"\'」]?', instruction)
+    if not m:
+        return 0, []
+    want = m.group(1)
+    if not want or want in ("图片", "的图片", "的", ":", "：", "文字"):
+        return 0, []
+    h, w = sprite.shape[:2]
+    th, tw = h // 2, w // 3
+    detail = []
+    for i in range(6):
+        col, row = i % 3, i // 3
+        t = sprite[row * th:(row + 1) * th, col * tw:(col + 1) * tw]
+        txt = ocr_tile_img(t)
+        hit = want in txt
+        detail.append({"tile": i + 1, "text": txt[:40], "hit": hit})
+        log(f"ocr tile{i+1}: {txt[:40]} hit={hit}")
+        if hit:
+            return i + 1, detail
+    return 0, detail
+
+
 def pick_tile(res, instruction):
     """choose tile index (1-6) matching instruction; returns (idx, detail) or (0, detail)"""
     cat = INST_CAT.get(instruction, "")
     special = INST_SPECIAL.get(instruction, [])
     if not cat and not special:
-        cat = "__any__"  # unknown instruction: any recognizable category counts
+        return 0, detail  # unknown instruction -> refresh instead of guessing (1/6)
     detail = []
     scores = []
     for i, (t, lab, prob) in enumerate(res):
@@ -847,33 +905,48 @@ def get_sprite_url(frame):
 
 
 def click_tile(page, frame, tile_idx):
-    """click the center of tile tile_idx (1-6) inside #slideBg"""
-    box = frame.locator("#slideBg").bounding_box()
+    """click the center of tile tile_idx (1-6) inside #slideBg; locator click first (iframe-safe)"""
+    try:
+        box = frame.locator("#slideBg").bounding_box()
+    except Exception:
+        box = None
     if not box:
         return False
     col = (tile_idx - 1) % 3
     row = (tile_idx - 1) // 3
-    x = box["x"] + (col + 0.5) * box["width"] / 3.0
-    y = box["y"] + (row + 0.5) * box["height"] / 2.0
-    human_delay(0.5, 1.2)
-    page.mouse.move(x, y, steps=8)
-    time.sleep(random.uniform(0.15, 0.4))
-    page.mouse.click(x, y)
-    log("clicked tile", tile_idx, "at", round(x, 1), round(y, 1))
-    return True
+    cx = (col + 0.5) * box["width"] / 3.0
+    cy = (row + 0.5) * box["height"] / 2.0
+    ok = False
+    human_delay(0.4, 1.0)
+    try:
+        frame.locator("#slideBg").click(position={"x": cx, "y": cy}, timeout=8000)
+        ok = True
+    except Exception:
+        pass
+    if not ok:
+        try:
+            page.mouse.move(box["x"] + cx, box["y"] + cy, steps=8)
+            time.sleep(random.uniform(0.15, 0.4))
+            page.mouse.click(box["x"] + cx, box["y"] + cy)
+            ok = True
+        except Exception:
+            pass
+    log("clicked tile", tile_idx, "at", round(box["x"] + cx, 1), round(box["y"] + cy, 1), "via", "locator" if ok else "FAIL")
+    return ok
 
 
 def click_confirm(frame):
     for sel in ["#embedVerifyBtn", "button[id*='verify']", "[class*='verifyButton']"]:
-        try:
-            el = frame.query_selector(sel)
-            if el:
-                human_delay(0.3, 0.8)
-                el.click()
-                log("confirm clicked")
-                return True
-        except Exception:
-            pass
+        for _ in range(2):
+            try:
+                el = frame.query_selector(sel)
+                if el:
+                    human_delay(0.3, 0.8)
+                    el.click(timeout=8000)
+                    log("confirm clicked")
+                    return True
+            except Exception:
+                time.sleep(1.5)
     # fallback: any button with 确定
     try:
         for b in frame.query_selector_all("button"):
@@ -1032,13 +1105,26 @@ def do_solve(page):
                 body = ""
             captured["resp"].append({"url": r.url, "status": r.status, "body": body[:800]})
             log("SENDRECOVER RESP", r.status, body[:400])
-        if "cap_union_prehandle" in r.url:
+        if "cap_union_prehandle" in r.url or "cap_union_new_getcapbysig" in r.url:
             try:
                 b = r.text()
-                m = re.search(r'instruction["\']?\s*[:=]\s*["\']([^"\']+)', b)
-                if m:
-                    prehandle_instructions.append(m.group(1))
-                    log("prehandle instruction:", m.group(1))
+                if len(b) < 3000 and ("instruction" in b[:500] or "{" in b[:200]):
+                    fn = os.path.join(EVID, "pre_" + str(int(time.time() * 1000)) + ".json")
+                    with open(fn, "w") as f:
+                        f.write(b[:4000])
+                try:
+                    obj = json.loads(b)
+                except Exception:
+                    m = re.search(r"\(\s*(\{.*\})\s*\)\s*$", b, re.S)
+                    obj = json.loads(m.group(1)) if m else None
+                ins = find_instruction(obj) if obj else ""
+                if not ins:
+                    m = re.search(r'instruction["\']?\s*[:=]\s*["\']([^"\']+)', b)
+                    if m:
+                        ins = m.group(1)
+                if ins:
+                    prehandle_instructions.append(ins)
+                    log("prehandle instruction:", ins)
             except Exception:
                 pass
 
@@ -1126,27 +1212,50 @@ def do_solve(page):
                 continue
             break
         cv2.imwrite(os.path.join(EVID, f"attempt_{attempt}_sprite.png"), sprite)
-        res = classify_tiles(sprite)
-        tile_idx, detail = pick_tile(res, instruction)
-        save_json(f"attempt_{attempt}_classify.json", {"instruction": instruction, "detail": detail})
-        log("classify:", json.dumps(detail, ensure_ascii=False))
+        # tile selection: text challenges (包含文字) use OCR; object challenges use classifier
+        tile_idx = 0
+        detail = []
+        if "包含文字" in instruction:
+            tile_idx, detail = pick_tile_text(sprite, instruction)
+            log("text-tile pick:", json.dumps(detail, ensure_ascii=False)[:300])
         if tile_idx == 0:
-            log("no tile matched; refresh")
+            res = classify_tiles(sprite)
+            tile_idx, detail = pick_tile(res, instruction)
+        save_json(f"attempt_{attempt}_classify.json", {"instruction": instruction, "detail": detail})
+        log("classify:", json.dumps(detail, ensure_ascii=False)[:600])
+        if tile_idx == 0:
+            log("no tile matched (unknown instruction); refresh")
             if attempt < MAX_CHALLENGES:
                 refresh_challenge(frame)
+                time.sleep(3)
                 continue
             break
         click_tile(page, frame, tile_idx)
-        time.sleep(random.uniform(1.0, 2.0))
+        time.sleep(random.uniform(3.0, 5.0))  # let the captcha JS register the selection
+        shot(page, f"attempt_{attempt}_after_click.png")
         click_confirm(frame)
-        # wait for outcome
+        # wait for outcome: verify response or sendRecoverEmail (25s window)
         t0 = time.time()
-        while time.time() - t0 < 12:
+        while time.time() - t0 < 25:
             if captured["req"] or captured["resp"]:
                 solved = True
                 break
             # check if captcha closed/failed
             time.sleep(1)
+        if solved:
+            log("solve: sendRecoverEmail fired!")
+            break
+        # check failure markers
+        try:
+            body_txt = frame.inner_text("body")
+        except Exception:
+            body_txt = ""
+        if "验证失败" in body_txt or "失败" in body_txt[:300]:
+            log("attempt failed:", body_txt[:150])
+        if attempt < MAX_CHALLENGES:
+            if not refresh_challenge(frame):
+                time.sleep(2)
+            time.sleep(2)
         if solved:
             log("solve: sendRecoverEmail fired!")
             break

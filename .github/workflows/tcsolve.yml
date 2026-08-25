@@ -37,9 +37,10 @@ jobs:
           python-version: '3.11'
       - name: deps
         run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q tesseract-ocr tesseract-ocr-chi-sim xvfb
           pip install -q playwright opencv-python-headless numpy pillow onnxruntime
           python -m playwright install --with-deps chromium
-          sudo apt-get install -y -q xvfb >/dev/null 2>&1 || true
       - name: run
         env:
           TC_MODE: ${{ github.event.inputs.mode }}
