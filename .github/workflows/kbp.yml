@@ -105,6 +105,8 @@ jobs:
             python3 kbp_register.py "${{ github.event.inputs.target }}" "${{ github.event.inputs.pwd }}" "${{ github.event.inputs.code }}"
           elif [ "$M" = "probe" ]; then
             python3 kbp_probe.py ${{ github.event.inputs.target }}
+          elif [ "$M" = "xffprobe" ]; then
+            python3 kbp_xff_probe.py
           elif [ "$M" = "pwds" ]; then
             python3 kbp_pwds.py "${{ github.event.inputs.target }}" '${{ github.event.inputs.pwds }}'
           else
