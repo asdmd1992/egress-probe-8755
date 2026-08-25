@@ -42,8 +42,21 @@ def probe(path):
         return 0
 
 
+def my_ip():
+    for svc in ("https://api.ipify.org", "https://ifconfig.me/ip", "https://ipv4.icanhazip.com"):
+        try:
+            r = urllib.request.urlopen(urllib.request.Request(svc, headers={"User-Agent": "curl/8"}), timeout=10)
+            ip = r.read().decode().strip()
+            if ip:
+                return ip
+        except Exception:
+            continue
+    return "unknown"
+
+
 if __name__ == "__main__":
     print(f"[*] base={BASE}", flush=True)
+    print(f"[IP] egress_ip={my_ip()}", flush=True)
     for p in PATHS:
         probe(p)
         time.sleep(2)
