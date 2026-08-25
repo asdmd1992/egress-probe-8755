@@ -216,6 +216,8 @@ INST_CAT = {
     "蘑菇": "plant", "蒲公英": "plant", "荷花": "plant", "梅花": "plant", "桃花": "plant",
     "樱花": "plant", "薰衣草": "plant", "绣球花": "plant", "康乃馨": "plant", "山茶花": "plant",
     "太阳": "nature", "月亮": "nature", "星星": "nature", "云": "nature", "彩虹": "nature",
+    "海岸": "nature", "海滩": "nature", "悬崖": "nature", "峡谷": "nature",
+    "冰川": "nature", "港湾": "nature", "海港": "nature", "码头": "nature",
     "山": "nature", "雪山": "nature", "火山": "nature", "大海": "nature", "海": "nature",
     "湖泊": "nature", "河流": "nature", "瀑布": "nature", "沙漠": "nature", "森林": "nature",
     "雪花": "nature", "冰块": "nature", "石头": "nature", "岩石": "nature", "冰山": "nature",
@@ -534,6 +536,14 @@ INST_SPECIAL = {
     "雪山": ["mountain", "alp", "snow", "glacier", "iceberg"],
     "火山": ["volcano"],
     "大海": ["sea", "ocean", "wave", "surf"],
+    "海岸": ["coast", "shore", "beach", "seaside", "sea", "ocean", "wave", "cliff", "bay", "gulf"],
+    "海滩": ["beach", "sand", "seashore", "coast"],
+    "悬崖": ["cliff", "crag", "precipice"],
+    "峡谷": ["canyon", "gorge", "valley"],
+    "冰川": ["glacier", "iceberg"],
+    "港湾": ["harbor", "harbour", "bay", "port", "dock"],
+    "海港": ["harbor", "harbour", "port", "dock", "seaport"],
+    "码头": ["dock", "pier", "wharf", "harbor"],
     "海": ["sea", "ocean", "wave", "surf"],
     "湖泊": ["lake", "pond", "reservoir"],
     "河流": ["river", "stream", "creek", "brook"],
@@ -769,6 +779,8 @@ def pick_tile(res, instruction):
     """choose tile index (1-6) matching instruction; returns (idx, detail) or (0, detail)"""
     cat = INST_CAT.get(instruction, "")
     special = INST_SPECIAL.get(instruction, [])
+    if not cat and not special:
+        cat = "__any__"  # unknown instruction: any recognizable category counts
     detail = []
     scores = []
     for i, (t, lab, prob) in enumerate(res):
@@ -780,7 +792,10 @@ def pick_tile(res, instruction):
                 if kw in ll:
                     wgt = max(wgt, 2.0)
             if wgt == 0 and cat:
-                if cat in cats_of(l):
+                if cat == "__any__":
+                    if cats_of(l):
+                        wgt = 1.0
+                elif cat in cats_of(l):
                     wgt = 1.0
             if wgt:
                 s += wgt * (1.0 + prob[j])
@@ -1039,14 +1054,40 @@ def do_solve(page):
     page.click('button[type="submit"]')
     log("email submitted")
 
-    frame = wait_captcha_frame(page, 45)
+    # captcha popup can take up to ~90s to appear on this egress (server-side slowdown);
+    # dual-channel wait: frame URL OR #tcaptcha_iframe_dy element (longer window)
+    frame = None
+    t0 = time.time()
+    while time.time() - t0 < 150:
+        frame = find_captcha_frame(page)
+        if frame:
+            log("captcha frame appeared after %.0fs" % (time.time() - t0))
+            break
+        try:
+            el = page.query_selector("#tcaptcha_iframe_dy")
+            if el:
+                log("tcaptcha_iframe_dy element at %.0fs; waiting for frame attach" % (time.time() - t0))
+                time.sleep(3)
+                frame = find_captcha_frame(page)
+                if frame:
+                    break
+        except Exception:
+            pass
+        if int(time.time() - t0) % 15 == 0:
+            log("waiting for captcha... %.0fs" % (time.time() - t0))
+        time.sleep(2)
     if not frame:
-        log("FAIL: no captcha frame appeared")
+        log("FAIL: no captcha frame appeared in 150s")
         try:
             log("frames: ", [(f.url[:120]) for f in page.frames])
         except Exception:
             pass
         shot(page, "no_captcha.png")
+        with open(os.path.join(EVID, "no_captcha.html"), "w") as f:
+            try:
+                f.write(page.content()[:50000])
+            except Exception:
+                pass
         return
 
     solved = False
