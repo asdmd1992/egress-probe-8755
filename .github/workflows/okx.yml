@@ -18,7 +18,7 @@ jobs:
         run: |
           if [ "${{ github.event.inputs.mode }}" = "okx" ]; then
             IFS='|' read -r K S P <<< "$OKX_CREDS"
-            python3 verify_okx.py "$K" "$S" "$P"
+            python3 verify_okx_dex.py "$K" "$S" "$P"
           else
             printf '%s' "$COVALENT_KEYS" | while IFS= read -r ck; do
               [ -n "$ck" ] && python3 verify_covalent.py "$ck"
