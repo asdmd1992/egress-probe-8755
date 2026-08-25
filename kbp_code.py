@@ -44,6 +44,11 @@ def main():
         r = c.post_enc("/api/User/SentVerificationCode", {"email": em, "type": typ})
         print("CODE %s SentVerificationCode type=%s -> %s" % (em, typ, json.dumps(r, ensure_ascii=False)[:300]), flush=True)
 
+    elif mode == "chk":
+        em = sys.argv[2]; typ = sys.argv[3]; code = sys.argv[4]
+        r = c.post_enc("/api/Register/CheckCaptchaCode", {"email": em, "code": code, "type": typ})
+        print("CHK %s CheckCaptchaCode(type=%s) -> %s" % (em, typ, json.dumps(r, ensure_ascii=False)[:300]), flush=True)
+
     elif mode == "verify":
         em = sys.argv[2]; typ = sys.argv[3]; code = sys.argv[4]
         r = c.post_enc("/api/Register/CheckCaptchaCode", {"email": em, "code": code, "type": typ})

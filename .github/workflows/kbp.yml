@@ -82,6 +82,8 @@ jobs:
           export KBP_PWD="${{ github.event.inputs.pwd }}"
           if [ "$M" = "code" ]; then
             python3 kbp_code.py code "${{ github.event.inputs.target }}" "${{ github.event.inputs.lines }}"
+          elif [ "$M" = "chk" ]; then
+            python3 kbp_code.py chk "${{ github.event.inputs.target }}" "${{ github.event.inputs.lines }}" "${{ github.event.inputs.code }}"
           elif [ "$M" = "verify" ]; then
             python3 kbp_code.py verify "${{ github.event.inputs.target }}" "${{ github.event.inputs.lines }}" "${{ github.event.inputs.code }}"
           elif [ "$M" = "reset" ]; then
