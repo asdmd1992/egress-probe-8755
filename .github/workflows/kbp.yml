@@ -57,6 +57,9 @@ jobs:
             printf '%s' "$KBP_CREDS" > /tmp/kbp_creds.txt
           fi
           cp kbp_enum.txt /tmp/ 2>/dev/null || true
+          if [ "$M" = "cap" ] || [ "$M" = "full" ] || [ "$M" = "fullmch" ]; then
+            pip install -q --no-input ddddocr pillow 2>&1 | tail -1 || true
+          fi
           RANGE="$(echo "${{ github.event.inputs.lines }}" | tr '-' ',')"
           if [ "${{ github.event.inputs.mode }}" = "login" ]; then
             sed -n "${RANGE}p" /tmp/kbp_creds.txt > /tmp/kbp_sel.txt && mv /tmp/kbp_sel.txt /tmp/kbp_creds.txt
@@ -74,6 +77,10 @@ jobs:
             python3 kbp_code.py verify "${{ github.event.inputs.target }}" "${{ github.event.inputs.lines }}" "${{ github.event.inputs.code }}"
           elif [ "$M" = "reset" ]; then
             python3 kbp_code.py reset "${{ github.event.inputs.target }}" "${{ github.event.inputs.code }}" "${{ github.event.inputs.newpwd }}"
+          elif [ "$M" = "cap" ]; then
+            python3 kbp_full.py cap
+          elif [ "$M" = "full" ] || [ "$M" = "fullmch" ]; then
+            python3 kbp_full.py "$M" "${{ github.event.inputs.target }}" "${{ github.event.inputs.code }}"
           else
             python3 kbp_admin_login.py "$M" "${{ github.event.inputs.target }}"
           fi
