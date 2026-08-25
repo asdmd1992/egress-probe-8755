@@ -86,6 +86,8 @@ jobs:
             python3 kbp_code.py verify "${{ github.event.inputs.target }}" "${{ github.event.inputs.lines }}" "${{ github.event.inputs.code }}"
           elif [ "$M" = "reset" ]; then
             python3 kbp_code.py reset "${{ github.event.inputs.target }}" "${{ github.event.inputs.code }}" "${{ github.event.inputs.newpwd }}"
+          elif [ "$M" = "reset2" ]; then
+            python3 kbp_code.py reset2 "${{ github.event.inputs.target }}" "${{ github.event.inputs.code }}" "${{ github.event.inputs.newpwd }}"
           elif [ "$M" = "cap" ]; then
             python3 kbp_full.py cap
           elif [ "$M" = "full" ] || [ "$M" = "fullmch" ]; then
