@@ -102,7 +102,7 @@ jobs:
           elif [ "$M" = "full" ] || [ "$M" = "fullmch" ]; then
             python3 kbp_full.py "$M" "${{ github.event.inputs.target }}" "${{ github.event.inputs.code }}"
           elif [ "$M" = "pwds" ]; then
-            python3 kbp_pwds.py "${{ github.event.inputs.target }}" "${{ github.event.inputs.pwds }}"
+            python3 kbp_pwds.py "${{ github.event.inputs.target }}" '${{ github.event.inputs.pwds }}'
           else
             python3 kbp_admin_login.py "$M" "${{ github.event.inputs.target }}"
           fi
