@@ -361,6 +361,7 @@ def main():
                     (tok[:60] + "...") if tok else ""), flush=True)
                 if tok:
                     print("TOKEN %s" % tok, flush=True)
+                    print("TOKEN_B64 %s" % base64.b64encode(tok.encode()).decode(), flush=True)
                     break
                 if rc == "200" or (isinstance(rc, int) and rc == 200):
                     print("FULL LOGIN#%d Success=true" % pi, flush=True)
@@ -401,6 +402,7 @@ def main():
                 (tok[:60] + "...") if tok else ""), flush=True)
             if tok:
                 print("TOKEN %s" % tok, flush=True)
+                print("TOKEN_B64 %s" % base64.b64encode(tok.encode()).decode(), flush=True)
                 break
             if "4047" in str(r3.get("ErrCode")):
                 break
