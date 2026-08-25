@@ -1,0 +1,26 @@
+name: okx
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'okx|covalent'
+        required: true
+        default: 'okx'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: go
+        env:
+          OKX_CREDS: ${{ secrets.OKX_CREDS }}
+          COVALENT_KEYS: ${{ secrets.COVALENT_KEYS }}
+        run: |
+          if [ "${{ github.event.inputs.mode }}" = "okx" ]; then
+            IFS='|' read -r K S P <<< "$OKX_CREDS"
+            python3 verify_okx.py "$K" "$S" "$P"
+          else
+            printf '%s' "$COVALENT_KEYS" | while IFS= read -r ck; do
+              [ -n "$ck" ] && python3 verify_covalent.py "$ck"
+            done
+          fi
