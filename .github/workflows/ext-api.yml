@@ -1,0 +1,22 @@
+name: ext-api
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'keys|bal'
+        required: true
+        default: 'keys'
+      target:
+        description: 'base url'
+        required: false
+        default: 'https://api.kbitpay.com'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: probe ext api
+        env:
+          EXT_APPS: ${{ secrets.EXT_APPS }}
+        run: |
+          python3 kbp_ext_probe.py "${{ github.event.inputs.mode }}" "${{ github.event.inputs.target }}"
