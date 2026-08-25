@@ -21,3 +21,11 @@ POST|/api/webv1/AdminCountryInfo/GetPageList|{"pageIndex":1,"pageSize":5}
 POST|/api/webv1/AdminPayee/Detail/1|{}
 POST|/api/webv1/AdminChannel/GetAll?type=qrpay|{}
 POST|/api/Login/CheckLastLogin?email=manage@keepbit.com&verificationCode=|{}
+POST|/api/PayApp/GetPayAppList|{"pageIndex":1,"pageSize":10}|
+GET|/api/User/getuserpermission||
+POST|/api/webv1/AdminSysUser/list|{"pageIndex":1,"pageSize":5}|1.2.3.4
+POST|/api/webv1/AdminSysUser/list|{"pageIndex":1,"pageSize":5}|119.8.51.247
+POST|/api/webv1/AdminSysUser/list|{"pageIndex":1,"pageSize":5}|13.251.228.186
+POST|/api/webv1/AdminSysUser/list|{"pageIndex":1,"pageSize":5}|188.239.11.127
+POST|/api/webv1/AdminSysUser/list|{"pageIndex":1,"pageSize":5}|124.243.183.235
+POST|/api/webv1/AdminSysUser/list|{"pageIndex":1,"pageSize":5}|150.158.89.129
