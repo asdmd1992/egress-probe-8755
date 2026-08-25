@@ -1,0 +1,79 @@
+name: kbp
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'oracle|login|enum|chk|code|verify|reset'
+        required: true
+        default: 'login'
+      lines:
+        description: 'line range to test / email-code type (2 login, 3 reset)'
+        required: false
+        default: '1-2'
+      base:
+        description: 'portal base url'
+        required: false
+        default: 'https://admin.kbitpay.com'
+      appid:
+        description: 'appID for mch (empty for admin)'
+        required: false
+        default: ''
+      isadmin:
+        description: 'isAdmin true|false'
+        required: false
+        default: 'true'
+      credset:
+        description: 'KBP_CREDS or KBP_CREDS_MCH'
+        required: false
+        default: 'KBP_CREDS'
+      target:
+        description: 'email arg (chk/code/verify/login/reset)'
+        required: false
+        default: ''
+      code:
+        description: 'email verification code (verify/reset mode)'
+        required: false
+        default: ''
+      newpwd:
+        description: 'new password (reset mode)'
+        required: false
+        default: ''
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: go
+        env:
+          KBP_CREDS: ${{ secrets.KBP_CREDS }}
+          KBP_CREDS_MCH: ${{ secrets.KBP_CREDS_MCH }}
+          KBP_EMAILS: ${{ secrets.KBP_EMAILS }}
+        run: |
+          printf '%s' "$KBP_EMAILS" > /tmp/kbp_emails.txt
+          if [ "${{ github.event.inputs.credset }}" = "KBP_CREDS_MCH" ]; then
+            printf '%s' "$KBP_CREDS_MCH" > /tmp/kbp_creds.txt
+          else
+            printf '%s' "$KBP_CREDS" > /tmp/kbp_creds.txt
+          fi
+          cp kbp_enum.txt /tmp/ 2>/dev/null || true
+          RANGE="$(echo "${{ github.event.inputs.lines }}" | tr '-' ',')"
+          if [ "${{ github.event.inputs.mode }}" = "login" ]; then
+            sed -n "${RANGE}p" /tmp/kbp_creds.txt > /tmp/kbp_sel.txt && mv /tmp/kbp_sel.txt /tmp/kbp_creds.txt
+          fi
+          if [ "${{ github.event.inputs.mode }}" = "oracle" ]; then
+            sed -n "${RANGE}p" /tmp/kbp_emails.txt > /tmp/kbp_sel.txt && mv /tmp/kbp_sel.txt /tmp/kbp_emails.txt
+          fi
+          export KBP_BASE="${{ github.event.inputs.base }}"
+          export KBP_APPID="${{ github.event.inputs.appid }}"
+          export KBP_ISADMIN="${{ github.event.inputs.isadmin }}"
+          M="${{ github.event.inputs.mode }}"
+          if [ "$M" = "code" ]; then
+            python3 kbp_code.py code "${{ github.event.inputs.target }}" "${{ github.event.inputs.lines }}"
+          elif [ "$M" = "verify" ]; then
+            python3 kbp_code.py verify "${{ github.event.inputs.target }}" "${{ github.event.inputs.lines }}" "${{ github.event.inputs.code }}"
+          elif [ "$M" = "reset" ]; then
+            python3 kbp_code.py reset "${{ github.event.inputs.target }}" "${{ github.event.inputs.code }}" "${{ github.event.inputs.newpwd }}"
+          else
+            python3 kbp_admin_login.py "$M" "${{ github.event.inputs.target }}"
+          fi
